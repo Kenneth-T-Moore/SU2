@@ -1,4 +1,4 @@
 SU2
 ===
 
-A plugin for SU2 (Stanford University Unstructured)
+(Coming soon!) A plugin for SU2 (Stanford University Unstructured)
