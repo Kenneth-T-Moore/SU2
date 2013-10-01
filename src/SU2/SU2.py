@@ -86,6 +86,9 @@ class Deform(Component):
         SU2.run.projection(self.config_in)
         # read Jacobian info from file
 
+    def apply_derivT(self, arg, result):
+	""" Matrix vector multiplication on the transposed Jacobian"""
+
 
 _obj_names = [
     "LIFT",
@@ -116,6 +119,10 @@ class Solve(Component):
             setattr(self, name, state.FUNCTIONS[name])
 
     def linearize(self):
+	""" Calculate adjoin and read it in """
+	
+	self.J = {}
+	
         for name in _obj_names:
             config_in.ADJ_OBJ_FUNC = name
             state = adjoint(self.config_in)
@@ -125,8 +132,13 @@ class Solve(Component):
             # read a CSV file (graph first 2 cols (index, sensitivity), sort by index)
             # transpose
 
-
-          
+    def apply_derivT(self, arg, result):
+	""" Matrix vector multiplication on the transposed Jacobian"""
+	
+	if 'mesh_file' in result:
+	    for name in _obj_names:
+		if name in arg:
+		    result['mesh_file'] += J[name].dot(arg[name])
       
 if __name__ == '__main__':
     pass
