@@ -1,13 +1,14 @@
-__all__ = ['SU2_Plugin']
+__all__ = ['Direct']
 
-import os, sys, shutil, copy
-import subprocess
+import os, sys, copy
+import numpy as np
 
 from openmdao.main.api import Component, Variable
-from openmdao.lib.datatypes.api import Instance
+from openmdao.main.datatypes.api import Array
+from openmdao.main.datatypes.file import File, FileRef
 
-from SU2.io.config import Config
-from SU2.run.interface import build_command, run_command
+from SU2.io import Config, State
+from SU2.run import direct, deform, adjoint
 
 # ------------------------------------------------------------
 #  Setup
@@ -43,199 +44,89 @@ class ConfigVar(Variable):
         	raise TypeError("value of '%s' must be a Config object" % name)
         return value
 
+def pts_from_mesh(meshfile, config):
+
+    mesh = SU2.mesh.tools.read(meshfile)
+
+    markers = config.MARKER_MONITORING
+    markers = markers.strip().strip('()').strip()
+    markers = ''.join(markers.split())
+    markers = markers.split(',')
+
+    _,nodes = SU2.mesh.tools.get_markerPoints(mesh,markers)
+
+    return len(nodes)
+
+
 # ------------------------------------------------------------
 #  SU2 Suite Interface Functions
 # ------------------------------------------------------------
 
-class DDC(Component):
-    """ run SU2_DDC 
-        partitions set by config.NUMBER_PART
-        currently forced to run serially
-    """
+class Deform(Component):
 
-    config = ConfigVar(Config(), iotype='in')
+    config_in = ConfigVar(Config(), iotype='in')
+    dv_vals = Array([], iotype='in')
+    config_out = ConfigVar(Config(), iotype='out', copy='deep')
+
+    def configure(self):
+        meshfile = self.config.MESH_FILENAME
+        # - read number of unique pts from mesh file
+        npts = pts_from_mesh(meshfile)
+        # - create mesh_file trait with data_shape attribute
+        self.add('mesh_file', File(iotype='out', data_shape=(npts,1)))
 
     def execute(self):
 	    # local copy
-	    konfig = copy.deepcopy(config)
-	    
-	    tempname = 'config_DDC.cfg'
-	    konfig.dump(tempname)
-	  
-	    processes = konfig['NUMBER_PART']
-	    
-	    the_Command = 'SU2_DDC ' + tempname
-	    the_Command = build_command( the_Command , processes )
-	    run_command( the_Command )
-	    
-	    #os.remove(tempname)
+        state = deform(self.config_in)
+        self.mesh_file = FileRef(path=state.FILES.MESH)
+        self.config_out = self.config_in
+
+    def linearize(self):
+        self.config_in.SURFACE_ADJ_FILENAME = self.config_in.SURFACE_FLOW_FILENAME
+        SU2.run.projection(self.config_in)
+        # read Jacobian info from file
 
 
-# def CFD(config):
-#     """ run SU2_CFD
-#         partitions set by config.NUMBER_PART
-#     """
-    
-#     konfig = copy.deepcopy(config)
-    
-#     tempname = 'config_CFD.cfg'
-#     konfig.dump(tempname)
-    
-#     processes = konfig['NUMBER_PART']
-    
-#     the_Command = 'SU2_CFD ' + tempname
-#     the_Command = build_command( the_Command , processes )
-#     run_command( the_Command )
-    
-#     #os.remove(tempname)
-    
-#     return
+_obj_names = [
+    "LIFT",
+    "DRAG",
+    "SIDEFORCE",
+    "MOMENT_X",
+    "MOMENT_Y",
+    "MOMENT_Z",
+    "FORCE_X",
+    "FORCE_Y",
+    "FORCE_Z"
+]
 
-# def MAC(config):
-#     """ run SU2_MAC
-#         partitions set by config.NUMBER_PART
-#         currently forced to run serially
-#     """    
-#     konfig = copy.deepcopy(config)
-    
-#     tempname = 'config_MAC.cfg'
-#     konfig.dump(tempname)
-    
-#     # must run with rank 1
-#     processes = konfig['NUMBER_PART']
-#     processes = min([1,processes])    
-    
-#     the_Command = 'SU2_MAC ' + tempname
-#     the_Command = build_command( the_Command , processes )
-#     run_command( the_Command )
-    
-#     #os.remove(tempname)
-    
-#     return
+class Solve(Component):
 
-# def MDC(config):
-#     """ run SU2_MDC
-#         partitions set by config.NUMBER_PART
-#         forced to run in serial, expects merged mesh input
-#     """
-#     konfig = copy.deepcopy(config)
-    
-#     tempname = 'config_MDC.cfg'
-#     konfig.dump(tempname) 
-    
-#     # must run with rank 1
-#     processes = konfig['NUMBER_PART']
-    
-#     the_Command = 'SU2_MDC ' + tempname
-#     the_Command = build_command( the_Command , processes )
-#     run_command( the_Command )
-    
-#     #os.remove(tempname)
-    
-#     return
+    config_in = ConfigVar(Config(), iotype='in')
+    mesh_file = File(iotype='in')
+    for name in _obj_names:
+        setattr(Solve, name, Float(0.0, iotype='out'))
 
-# def GPC(config):
-#     """ run SU2_GPC
-#         partitions set by config.NUMBER_PART
-#     """    
-#     konfig = copy.deepcopy(config)
-    
-#     tempname = 'config_GPC.cfg'
-#     konfig.dump(tempname)   
-    
-#     processes = konfig['NUMBER_PART']
-    
-#     the_Command = 'SU2_GPC ' + tempname
-#     the_Command = build_command( the_Command , processes )
-#     run_command( the_Command )
-    
-#     #os.remove(tempname)
-    
-#     return
+    def configure(self):
+        pass
 
-# def GDC(config):
-#     """ run SU2_GDC
-#         partitions set by config.NUMBER_PART
-#         forced to run in serial
-#     """    
-#     konfig = copy.deepcopy(config)
-    
-#     tempname = 'config_GDC.cfg'
-#     konfig.dump(tempname)   
-    
-#     # must run with rank 1
-#     processes = konfig['NUMBER_PART']
-        
-#     the_Command = 'SU2_GDC ' + tempname
-#     the_Command = build_command( the_Command , processes )
-#     run_command( the_Command )
-    
-#     #os.remove(tempname)
-    
-#     return
+    def execute(self):
+        # local copy
+        state = direct(self.config_in)
+        for name in _obj_names:
+            setattr(self, name, state.FUNCTIONS[name])
 
-# def SMC(config):
-#     """ run SU2_SMC
-#         partitions set by config.NUMBER_PART
-#     """    
-#     konfig = copy.deepcopy(config)    
-    
-#     tempname = 'config_SMC.cfg'
-#     konfig.dump(tempname)   
-    
-#     # must run with rank 1
-#     processes = konfig['NUMBER_PART']
-#     processes = min([1,processes])       
-    
-#     the_Command = 'SU2_SMC ' + tempname
-#     the_Command = build_command( the_Command , processes )
-#     run_command( the_Command )
-    
-#     #os.remove(tempname)
-    
-#     return
+    def linearize(self):
+        for name in _obj_names:
+            config_in.ADJ_OBJ_FUNC = name
+            state = adjoint(self.config_in)
+            csvname = self.config_in.SURFACE_ADJ_FILENAME+'.csv'
+            suffix = SU2.io.tools.get_adjointSuffix(name)
+            csvname = SU2.io.tools.add_suffix(csvname, suffix)
+            # read a CSV file (graph first 2 cols (index, sensitivity), sort by index)
+            # transpose
 
-# def PBC(config):
-#     """ run SU2_PBC
-#         partitions set by config.NUMBER_PART
-#         currently forced to run serially
-#     """    
-#     konfig = copy.deepcopy(config)
-    
-#     tempname = 'config_PBC.cfg'
-#     konfig.dump(tempname)
-    
-#     # must run with rank 1
-#     processes = konfig['NUMBER_PART']
-#     processes = min([1,processes])      
-    
-#     the_Command = 'SU2_PBC ' + tempname
-#     the_Command = build_command( the_Command , processes )
-#     run_command( the_Command )
-    
-#     #os.remove(tempname)
-    
-#     return
-        
-# def SOL(config):
-#     """ run SU2_SOL
-#       partitions set by config.NUMBER_PART
-#     """
-  
-#     konfig = copy.deepcopy(config)
-    
-#     tempname = 'config_SOL.cfg'
-#     konfig.dump(tempname)
-  
-#     # must run with rank 1
-#     processes = konfig['NUMBER_PART']
-    
-#     the_Command = 'SU2_SOL ' + tempname
-#     the_Command = build_command( the_Command , processes )
-#     run_command( the_Command )
-    
-#     #os.remove(tempname)
-    
-#     return
 
+          
       
+if __name__ == '__main__':
+    pass
