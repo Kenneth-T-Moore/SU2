@@ -90,7 +90,7 @@ class Deform(Component):
 	""" Matrix vector multiplication on the transposed Jacobian"""
 
 	if 'mesh_file' in arg and 'dv_vals' in result:
-	    result['dv_vals'] += J.dot(arg['mesh_file'])
+	    result['dv_vals'] += self.J.dot(arg['mesh_file'])
       
 _obj_names = [
     "LIFT",
@@ -138,7 +138,7 @@ class Solve(Component):
 	if 'mesh_file' in result:
 	    for j, name in enumerate(_obj_names):
 		if name in arg:
-		    result['mesh_file'] += J[:, j]*arg[name]
+		    result['mesh_file'] += self.J[:, j]*arg[name]
       
 if __name__ == '__main__':
     pass
