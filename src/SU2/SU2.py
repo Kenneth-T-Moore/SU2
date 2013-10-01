@@ -89,7 +89,9 @@ class Deform(Component):
     def apply_derivT(self, arg, result):
 	""" Matrix vector multiplication on the transposed Jacobian"""
 
-
+	if 'mesh_file' in arg and 'dv_vals' in result:
+	    result['dv_vals'] += J.dot(arg['mesh_file'])
+      
 _obj_names = [
     "LIFT",
     "DRAG",
@@ -119,9 +121,7 @@ class Solve(Component):
             setattr(self, name, state.FUNCTIONS[name])
 
     def linearize(self):
-	""" Calculate adjoin and read it in """
-	
-	self.J = {}
+	""" Calculate adjoint and read it in """
 	
         for name in _obj_names:
             config_in.ADJ_OBJ_FUNC = name
@@ -136,9 +136,9 @@ class Solve(Component):
 	""" Matrix vector multiplication on the transposed Jacobian"""
 	
 	if 'mesh_file' in result:
-	    for name in _obj_names:
+	    for j, name in enumerate(_obj_names):
 		if name in arg:
-		    result['mesh_file'] += J[name].dot(arg[name])
+		    result['mesh_file'] += J[:, j]*arg[name]
       
 if __name__ == '__main__':
     pass
